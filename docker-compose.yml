@@ -1,0 +1,9 @@
+services:
+  handwriting-app:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./handwritten_last2.keras:/app/handwritten_last2.keras
+    environment:
+      - FLASK_ENV=production

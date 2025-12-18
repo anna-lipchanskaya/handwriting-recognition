@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Распознавание рукописного текста</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Распознавание рукописного текста</h1>
+        </header>
+
+        <main>
+            <section class="description">
+                <h2>О проекте</h2>
+                <p>Компьютерное зрение — это область искусственного интеллекта, которая занимается задачами извлечения, анализа и интерпретации информации из визуальных данных, таких как изображения и видео.</p>
+                <p>Данное приложение позволяет распознавать английские рукописные символы с помощью нейронной сети. Загрузите изображение с рукописным текстом для распознавания.</p>
+            </section>
+
+            {% if not model_loaded %}
+            <div class="alert error">
+                <strong>Внимание:</strong> Модель нейронной сети не загружена. Убедитесь, что файл 'handwritten_last2.keras' находится в корневой директории проекта.
+            </div>
+            {% endif %}
+
+            <section class="upload-section">
+                <h3>Загрузите изображение с рукописным текстом</h3>
+
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-content">
+                        <span class="upload-icon">📁</span>
+                        <p>Перетащите файл сюда или нажмите для выбора</p>
+                        <input type="file" id="fileInput" accept="image/*" hidden>
+                        <button type="button" onclick="document.getElementById('fileInput').click()">
+                            Выбрать файл
+                        </button>
+                    </div>
+                </div>
+
+                <div class="preview" id="previewContainer" style="display: none;">
+                    <h4>Предпросмотр:</h4>
+                    <img id="previewImage" src="" alt="Предпросмотр">
+                </div>
+
+                <button id="recognizeBtn" onclick="recognizeImage()" disabled>
+                    Распознать текст
+                </button>
+            </section>
+
+            <section class="result-section">
+                <div id="resultContainer"></div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const uploadArea = document.getElementById('uploadArea');
+        const previewContainer = document.getElementById('previewContainer');
+        const previewImage = document.getElementById('previewImage');
+        const recognizeBtn = document.getElementById('recognizeBtn');
+        const resultContainer = document.getElementById('resultContainer');
+
+        // Обработчики для drag and drop
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files;
+                handleFileSelect();
+            }
+        });
+
+        // Обработчик выбора файла
+        fileInput.addEventListener('change', handleFileSelect);
+
+        function handleFileSelect() {
+            const file = fileInput.files[0];
+            if (file) {
+                if (!file.type.startsWith('image/')) {
+                    alert('Пожалуйста, выберите файл изображения');
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    previewImage.src = e.target.result;
+                    previewContainer.style.display = 'block';
+                    recognizeBtn.disabled = false;
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        async function recognizeImage() {
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            recognizeBtn.disabled = true;
+            recognizeBtn.textContent = 'Обработка...';
+            resultContainer.innerHTML = '<div class="alert processing">Обработка изображения...</div>';
+
+            try {
+                const formData = new FormData();
+                formData.append('image', file);
+
+                const response = await fetch('/recognize', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    resultContainer.innerHTML = `
+                        <div class="alert success">
+                            <strong>Распознанный текст:</strong>
+                            <span class="result-text">${result.recognized_text}</span>
+                        </div>
+                    `;
+                } else {
+                    resultContainer.innerHTML = `
+                        <div class="alert error">
+                            <strong>Ошибка:</strong> ${result.error}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultContainer.innerHTML = `
+                    <div class="alert error">
+                        <strong>Ошибка:</strong> ${error.message}
+                    </div>
+                `;
+            } finally {
+                recognizeBtn.disabled = false;
+                recognizeBtn.textContent = 'Распознать текст';
+            }
+        }
+    </script>
+</body>
+</html>
