@@ -16,12 +16,26 @@ import warnings
 
 warnings.filterwarnings('ignore', category=FutureWarning)
 
-VGG_MODEL_PATH = "handwritten_VGG16_last.keras"
-TRANSFORMER_MODEL_PATH = "handwritten_decode_vgg6_last2.keras"
-LAST2_MODEL_PATH = "CTC_handwritten.keras"
-BASIC_MODEL_PATH = "handwritten_basic.keras"
+import os
+import sys
+
+
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
+
+VGG_MODEL_PATH = resource_path("handwritten_VGG16_last.keras")
+TRANSFORMER_MODEL_PATH = resource_path("handwritten_decode_vgg6_last2.keras")
+LAST2_MODEL_PATH = resource_path("CTC_handwritten.keras")
+BASIC_MODEL_PATH = resource_path("handwritten_basic.keras")
 
 alphabet = "',.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+ctc_alphabet = "',.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
 print("Инициализация EasyOCR детектора...")
 try:
@@ -30,6 +44,7 @@ try:
 except Exception as e:
     print(e)
     reader = None
+
 
 def decode_label(num, alphabet, pad_token=None):
     if pad_token is None:
@@ -42,6 +57,7 @@ def decode_predictions_ctc(preds, alphabet):
     values = get_value(ctc_decode(preds, input_length=input_length, greedy=True)[0][0])
     texts = [decode_label(value[value >= 0], alphabet) for value in values]
     return texts
+
 
 def adaptive_threshold(image):
     image = cv2.GaussianBlur(image, (5, 5), 0)
@@ -88,10 +104,11 @@ def preprocess_image(image):
     normalized = normalized[np.newaxis, ...]
     return normalized
 
+
 def detect_text_with_easyocr(image, status_callback=None):
     if reader is None:
         if status_callback:
-            status_callback("EasyOCR не инициализирован")
+            status_callback("EasyOCR не инициализирован!")
         return [], [], []
 
     try:
@@ -216,6 +233,7 @@ def draw_easyocr_segmentation(image, boxes, line_ids):
 
     return vis
 
+
 char_to_idx = {'<pad>': 0, '<bos>': 1, '<eos>': 2, '<unk>': 3, "'": 4, ',': 5, '.': 6,
                **{chr(i + 65): i + 7 for i in range(26)},
                **{chr(i + 97): i + 33 for i in range(26)}}
@@ -263,6 +281,7 @@ def greedy_decode_single_image(model, image, max_len=19):
 
     return text
 
+
 print("Загрузка моделей...")
 
 transformer_model = None
@@ -301,6 +320,7 @@ try:
 except Exception as e:
     print(f"Ошибка загрузки базовой модели: {e}")
 
+
 def recognize_full_text(image, status_callback=None):
     if status_callback:
         status_callback("Начало распознавания...")
@@ -309,7 +329,7 @@ def recognize_full_text(image, status_callback=None):
 
     if len(word_images) == 0:
         if status_callback:
-            status_callback("Текст не найден")
+            status_callback("Текст не найден!")
         return "Текст не найден", "Текст не найден", "Текст не найден", "Текст не найден", image
 
     transformer_result = []
@@ -357,7 +377,7 @@ def recognize_full_text(image, status_callback=None):
             basic_result.append("?")
 
     if status_callback:
-        status_callback("Распознавание завершено")
+        status_callback("Распознавание завершено!")
 
     segmentation_image = draw_easyocr_segmentation(image, boxes, line_ids)
 
@@ -368,6 +388,7 @@ def recognize_full_text(image, status_callback=None):
         " ".join(basic_result),
         segmentation_image
     )
+
 
 class LoadingWindow:
     def __init__(self, parent):
@@ -454,33 +475,43 @@ def recognize_image():
             y = (result_window.winfo_screenheight() // 2) - 400
             result_window.geometry(f'1200x800+{x}+{y}')
 
-            main_frame = tk.Frame(result_window)
-            main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-
             image_rgb = cv2.cvtColor(seg_img, cv2.COLOR_BGR2RGB)
             height, width = image_rgb.shape[:2]
 
-            max_display_width = main_frame.winfo_width() - 40
-            if max_display_width <= 0:
-                max_display_width = 1000
+            result_window.update_idletasks()
+            window_width = result_window.winfo_width()
+            window_height = result_window.winfo_height()
 
-            if width > max_display_width:
-                scale = max_display_width / width
+            max_width = window_width - 100
+            max_height = window_height - 450
+
+            if width > max_width or height > max_height:
+
+                scale_w = max_width / width
+                scale_h = max_height / height
+
+                scale = min(scale_w, scale_h, 1.0)
+
+                new_width = int(width * scale)
                 new_height = int(height * scale)
-                image_rgb = cv2.resize(image_rgb, (max_display_width, new_height))
+
+                image_rgb = cv2.resize(image_rgb, (new_width, new_height), interpolation=cv2.INTER_AREA)
+            else:
+                new_width = width
+                new_height = height
 
             img_show = Image.fromarray(image_rgb)
             img_tk = ImageTk.PhotoImage(img_show)
 
-            img_frame = tk.Frame(main_frame)
-            img_frame.pack(pady=10, fill=tk.X)
+            img_frame = tk.Frame(result_window)
+            img_frame.pack(pady=10, padx=10, fill=tk.X)
 
             label_img = tk.Label(img_frame, image=img_tk)
             label_img.image = img_tk
             label_img.pack()
 
-            results_frame = tk.Frame(main_frame)
-            results_frame.pack(pady=10, fill=tk.BOTH, expand=True)
+            results_frame = tk.Frame(result_window)
+            results_frame.pack(pady=10, padx=20, fill=tk.BOTH, expand=True)
 
             canvas = tk.Canvas(results_frame)
             scrollbar_vert = tk.Scrollbar(results_frame, orient="vertical", command=canvas.yview)
@@ -550,6 +581,7 @@ def recognize_image():
 
     threading.Thread(target=run_recognition).start()
 
+
 root = tk.Tk()
 root.geometry("900x600")
 root.title("OCR System - 4 модели распознавания")
@@ -586,6 +618,7 @@ tk.Button(root, text="Выход",
           bg="#f44336", fg="white",
           font=("Helvetica", 10)).pack(pady=10)
 
+# Инструкция
 info_text = """Инструкция:
 1. Нажмите 'Выбрать изображение'
 2. Выберите изображение с рукописным текстом
